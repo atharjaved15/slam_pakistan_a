@@ -9,6 +9,7 @@ class ApplicationForm {
   final String contact1;
   final String contact2;
   final String address;
+  final String imageUrl; // New field to store the image URL
 
   ApplicationForm({
     required this.serialNumber,
@@ -21,9 +22,10 @@ class ApplicationForm {
     required this.contact1,
     required this.contact2,
     required this.address,
+    required this.imageUrl, // Make sure this is required in the constructor
   });
 
-  // Convert a ApplicationForm object into a Map.
+  // Convert an ApplicationForm object into a Map.
   Map<String, dynamic> toMap() {
     return {
       'serialNumber': serialNumber,
@@ -36,6 +38,7 @@ class ApplicationForm {
       'contact1': contact1,
       'contact2': contact2,
       'address': address,
+      'imageUrl': imageUrl, // Include the image URL in the map
     };
   }
 }

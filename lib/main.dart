@@ -1,15 +1,18 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-// ignore: depend_on_referenced_packages
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:io'; // Import only if you're targeting platforms other than web
+
 // ignore: depend_on_referenced_packages
 import 'package:cloud_firestore/cloud_firestore.dart';
+// ignore: depend_on_referenced_packages
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import 'package:slam_pakistan_1/data_model.dart';
 import 'package:slam_pakistan_1/firebase_options.dart';
 import 'package:slam_pakistan_1/firebase_services.dart';
-
-// Ensure you have your Firebase options configured
-// Replace this with your actual Firebase options
+import 'package:slam_pakistan_1/receipt_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -100,7 +103,7 @@ class MainBanner extends StatelessWidget {
               end: Alignment.bottomRight,
             ),
             image: DecorationImage(
-              image: AssetImage('assets/header_bg.jpg'),
+              image: AssetImage('images/header_bg.jpg'),
               fit: BoxFit.cover,
               colorFilter: ColorFilter.mode(
                 Colors.black45,
@@ -324,6 +327,12 @@ class _ApplyFormState extends State<ApplyForm>
   final TextEditingController _contact2Controller = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
 
+  // Image picker and storage
+  final ImagePicker _picker = ImagePicker();
+  XFile? _selectedImage;
+  String? _uploadedImageUrl;
+  double _uploadProgress = 0;
+
   // Form fields
   String _name = '';
   String _fatherName = '';
@@ -335,59 +344,12 @@ class _ApplyFormState extends State<ApplyForm>
   String _contact2 = '';
   String _address = '';
 
-  void _submitApplyForm() {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-
-      final newApplication = ApplicationForm(
-        serialNumber: _serialNumber,
-        name: _nameController.text.toString(),
-        fatherName: _fatherNameController.text.toString(),
-        dob: _dob,
-        schoolCollege: _schoolCollegeController.text.toString(),
-        studentClass: _classController.toString(),
-        category: _category,
-        contact1: _contact1Controller.text.toString(),
-        contact2: _contact2Controller.text.toString(),
-        address: _addressController.text.toString(),
-      );
-
-      FirebaseService().addApplication(newApplication);
-      _nameController.clear();
-      _fatherNameController.clear();
-      _dobController.clear();
-      _schoolCollegeController.clear();
-      _classController.clear();
-      _contact1Controller.clear();
-      _contact2Controller.clear();
-      _addressController.clear();
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Application Submitted'),
-          content: Text(
-            'Thank you for your application, $_name!\nYour Serial Number is $_serialNumber.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _controller.forward();
-              },
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  late AnimationController _controller;
-  late Animation<double> _buttonAnimation;
-
   // Serial Number
   int _serialNumber = 0;
   bool _isLoading = true;
+
+  late AnimationController _controller;
+  late Animation<double> _buttonAnimation;
 
   @override
   void initState() {
@@ -442,82 +404,95 @@ class _ApplyFormState extends State<ApplyForm>
     }
   }
 
+  Future<void> _pickImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = pickedFile;
+      });
+    }
+  }
+
+  Future<void> _uploadImage() async {
+    if (_selectedImage == null) return;
+
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child('applications/${_name}_${_dob.toIso8601String()}.jpg');
+
+    UploadTask uploadTask =
+        storageRef.putData(await _selectedImage!.readAsBytes());
+
+    uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+      setState(() {
+        _uploadProgress = snapshot.bytesTransferred.toDouble() /
+            snapshot.totalBytes.toDouble();
+      });
+    });
+
+    TaskSnapshot taskSnapshot = await uploadTask;
+    _uploadedImageUrl = await taskSnapshot.ref.getDownloadURL();
+  }
+
+  void _submitApplyForm() async {
+    if (_formKey.currentState!.validate() && _selectedImage != null) {
+      _formKey.currentState!.save();
+
+      // Upload the image and get the download URL
+      await _uploadImage();
+
+      final newApplication = ApplicationForm(
+        serialNumber: _serialNumber,
+        name: _nameController.text.toString(),
+        fatherName: _fatherNameController.text.toString(),
+        dob: _dob,
+        schoolCollege: _schoolCollegeController.text.toString(),
+        studentClass: _classController.text.toString(),
+        category: _category,
+        contact1: _contact1Controller.text.toString(),
+        contact2: _contact2Controller.text.toString(),
+        address: _addressController.text.toString(),
+        imageUrl: _uploadedImageUrl!,
+      );
+
+      FirebaseService().addApplication(newApplication);
+      if (kDebugMode) {
+        print('Application added to Firebase');
+      }
+
+      // Navigate to ReceiptScreen
+      // ignore: use_build_context_synchronously
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ReceiptScreen(application: newApplication),
+        ),
+      );
+
+      // Clear the form fields after submission
+      _nameController.clear();
+      _fatherNameController.clear();
+      _dobController.clear();
+      _schoolCollegeController.clear();
+      _classController.clear();
+      _contact1Controller.clear();
+      _contact2Controller.clear();
+      _addressController.clear();
+      setState(() {
+        _selectedImage = null;
+        _uploadProgress = 0;
+      });
+    } else if (_selectedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an image')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  Future<void> _submitForm() async {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
-
-      if (_serialNumber == null) {
-        // Handle serial number not fetched
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate serial number.')),
-        );
-        return;
-      }
-
-      // Create a new application document
-      CollectionReference applications =
-          FirebaseFirestore.instance.collection('applications');
-
-      try {
-        await applications.add({
-          'serialNumber': _serialNumber,
-          'name': _name,
-          'fatherName': _fatherName,
-          'dob': _dob,
-          'schoolCollege': _schoolCollege,
-          'class': _classController.text.toString(),
-          'category': _category,
-          'contact1': _contact1,
-          'contact2': _contact2,
-          'address': _address,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        // Show success dialog
-        showDialog(
-          // ignore: use_build_context_synchronously
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Application Submitted'),
-            content: Text(
-              'Thank you for your application, $_name!\nYour Serial Number is $_serialNumber.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  _controller.forward();
-                  // Optionally, reset the form or navigate
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-
-        // Optionally, reset the form and fetch new serial number
-        _formKey.currentState!.reset();
-        setState(() {
-          _serialNumber = 0;
-          _isLoading = true;
-        });
-        _fetchSerialNumber();
-      } catch (e) {
-        if (kDebugMode) {
-          print('Error submitting application: $e');
-        }
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to submit application.')),
-        );
-      }
-    }
   }
 
   @override
@@ -544,7 +519,6 @@ class _ApplyFormState extends State<ApplyForm>
                             fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
-                      // Serial Number Field (Read-Only)
                       TextFormField(
                         initialValue:
                             _serialNumber != null ? '$_serialNumber' : '',
@@ -706,6 +680,39 @@ class _ApplyFormState extends State<ApplyForm>
                         },
                       ),
                       const SizedBox(height: 20),
+                      Text(
+                        'Upload Profile Picture:',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          height: 150,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: _selectedImage == null
+                              ? const CircleAvatar(
+                                  radius: 200,
+                                  child: Center(
+                                    child: Text(
+                                      'Tap to select an image',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                  ),
+                                )
+                              : Image.network(
+                                  _selectedImage!.path,
+                                  fit: BoxFit.cover,
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      if (_uploadProgress > 0)
+                        LinearProgressIndicator(value: _uploadProgress),
+                      const SizedBox(height: 20),
                       ScaleTransition(
                         scale: _buttonAnimation,
                         child: ElevatedButton(
@@ -797,13 +804,6 @@ class TeamMemberCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withAlpha(10),
           borderRadius: BorderRadius.circular(10),
-          // boxShadow: const [
-          //   BoxShadow(
-          //     color: Colors.black26,
-          //     blurRadius: 10,
-          //     offset: Offset(0, 5),
-          //   ),
-          // ],
         ),
         child: Column(
           children: [
