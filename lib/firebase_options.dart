@@ -60,4 +60,5 @@ class DefaultFirebaseOptions {
     authDomain: 'superstarstudio-80bec.firebaseapp.com',
     storageBucket: 'superstarstudio-80bec.appspot.com',
   );
+
 }
