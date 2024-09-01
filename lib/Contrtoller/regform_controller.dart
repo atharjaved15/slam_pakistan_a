@@ -5,11 +5,9 @@ import 'package:get/get.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 // ignore: depend_on_referenced_packages
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:slam_pakistan_1/Pages/home_page.dart';
-import 'dart:convert';
 
 class RegistrationController extends GetxController {
   var serialNumber = ''.obs;
@@ -230,9 +228,6 @@ class RegistrationController extends GetxController {
     final pdfData = await pdf.save();
     final blob = html.Blob([pdfData], 'application/pdf');
     final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..setAttribute("download", "${serialNumber.value}.pdf")
-      ..click();
     html.Url.revokeObjectUrl(url);
   }
 }

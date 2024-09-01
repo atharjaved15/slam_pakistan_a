@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+// ignore: depend_on_referenced_packages
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:slam_pakistan_1/Widget/custom_button.dart';
 
@@ -7,9 +8,11 @@ class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
 
   @override
+  // ignore: library_private_types_in_public_api
   _LandingPageState createState() => _LandingPageState();
 }
 
+//newclass
 class _LandingPageState extends State<LandingPage> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
